@@ -5,6 +5,7 @@ namespace Illuminate\Queue\Jobs;
 use Aws\Sqs\SqsClient;
 use Illuminate\Container\Container;
 use Illuminate\Contracts\Queue\Job as JobContract;
+use Illuminate\Queue\SqsQueue;
 use Illuminate\Support\Arr;
 
 class SqsJob extends Job implements JobContract
@@ -185,7 +186,16 @@ class SqsJob extends Job implements JobContract
             return null;
         }
 
-        return is_string($decoded['@pointer']) ? $decoded['@pointer'] : null;
+        $pointer = is_string($decoded['@pointer']) ? $decoded['@pointer'] : null;
+
+        // The write side namespaces every overflow key under EXTENDED_PAYLOAD_CACHE_PREFIX;
+        // reject any pointer outside that namespace so a crafted message body cannot make the
+        // worker read or delete arbitrary cache keys.
+        if ($pointer === null || ! str_starts_with($pointer, SqsQueue::EXTENDED_PAYLOAD_CACHE_PREFIX)) {
+            return null;
+        }
+
+        return $pointer;
     }
 
     /**
